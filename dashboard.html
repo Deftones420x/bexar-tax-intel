@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bexar Tax Intel — Delinquency Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080b10;
+    --surface: #0d1117;
+    --surface2: #131920;
+    --surface3: #1a2332;
+    --border: #1e2d3d;
+    --border2: #253446;
+    --amber: #f5a623;
+    --amber-dim: #c4811a;
+    --red: #ff4444;
+    --red-dim: #cc2222;
+    --green: #00d084;
+    --green-dim: #009960;
+    --blue: #3b9eff;
+    --blue-dim: #1a6ec4;
+    --text: #e8edf2;
+    --text-dim: #7a8fa6;
+    --text-muted: #445566;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-ui: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(59,158,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,158,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,11,16,0.95);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: 32px;
+    letter-spacing: 2px;
+    color: var(--amber);
+    line-height: 1;
+  }
+
+  .logo-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .scan-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  .pulse-dot.scanning { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .pulse-dot.idle { background: var(--text-muted); box-shadow: none; animation: none; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  .btn {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-amber { background: var(--amber); color: #000; }
+  .btn-amber:hover { background: #ffb833; }
+  .btn-outline { background: transparent; color: var(--text-dim); border: 1px solid var(--border2); }
+  .btn-outline:hover { border-color: var(--amber); color: var(--amber); }
+  .btn-red { background: var(--red-dim); color: #fff; }
+  .btn-red:hover { background: var(--red); }
+
+  /* ── STATS BAR ── */
+  .stats-bar {
+    position: relative;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-card {
+    padding: 20px 24px;
+    border-right: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    transition: background 0.2s;
+    cursor: default;
+  }
+
+  .stat-card:last-child { border-right: none; }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+  }
+
+  .stat-card.amber::after { background: var(--amber); }
+  .stat-card.red::after { background: var(--red); }
+  .stat-card.green::after { background: var(--green); }
+  .stat-card.blue::after { background: var(--blue); }
+
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: 36px;
+    letter-spacing: 1px;
+    line-height: 1;
+  }
+
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.blue { color: var(--blue); }
+  .stat-value.white { color: var(--text); }
+
+  .stat-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    position: relative;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: calc(100vh - 130px);
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    background: var(--surface);
+  }
+
+  .sidebar-section {
+    margin-bottom: 24px;
+  }
+
+  .sidebar-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .filter-group {
+    margin-bottom: 12px;
+  }
+
+  .filter-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .filter-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .filter-input:focus { border-color: var(--amber); }
+
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    width: 100%;
+    margin-bottom: 6px;
+  }
+
+  .filter-toggle:hover { border-color: var(--border2); }
+  .filter-toggle.active { border-color: var(--amber); background: rgba(245,166,35,0.08); }
+
+  .toggle-box {
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--border2);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .filter-toggle.active .toggle-box {
+    background: var(--amber);
+    border-color: var(--amber);
+  }
+
+  .toggle-check { font-size: 10px; color: #000; display: none; }
+  .filter-toggle.active .toggle-check { display: block; }
+
+  .toggle-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    flex: 1;
+    text-align: left;
+  }
+
+  .toggle-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--surface3);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  /* Progress bar */
+  .progress-wrap {
+    background: var(--surface2);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--amber), var(--amber-dim));
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+
+  .progress-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* ── TABLE AREA ── */
+  .table-area {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .table-toolbar {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+  }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    max-width: 360px;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .search-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 8px 10px 8px 32px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .search-input:focus { border-color: var(--amber); }
+
+  .result-count {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    flex: 1;
+    overflow: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--surface2);
+  }
+
+  th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  th:hover { color: var(--amber); }
+
+  th.sorted { color: var(--amber); }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  tr:hover td { background: rgba(59,158,255,0.03); }
+
+  .account-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--blue);
+    text-decoration: none;
+  }
+
+  .account-num:hover { color: var(--amber); text-decoration: underline; }
+
+  .owner-name {
+    font-weight: 600;
+    font-size: 12px;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .address-cell {
+    color: var(--text-dim);
+    font-size: 11px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .money {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align: right;
+  }
+
+  .money.live-due { color: var(--red); font-weight: 500; }
+  .money.roll-due { color: var(--text-muted); }
+  .money.variance-up { color: var(--red); }
+  .money.variance-down { color: var(--green); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .badge-red { background: rgba(255,68,68,0.15); color: var(--red); border: 1px solid rgba(255,68,68,0.3); }
+  .badge-amber { background: rgba(245,166,35,0.15); color: var(--amber); border: 1px solid rgba(245,166,35,0.3); }
+  .badge-green { background: rgba(0,208,132,0.12); color: var(--green); border: 1px solid rgba(0,208,132,0.25); }
+  .badge-muted { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+
+  .last-payment {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .last-payment.never { color: var(--red); font-weight: 500; }
+  .last-payment.recent { color: var(--green); }
+  .last-payment.old { color: var(--amber); }
+
+  .action-btn {
+    font-size: 10px;
+    padding: 5px 10px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    transition: all 0.15s;
+  }
+
+  .action-btn:hover { border-color: var(--amber); color: var(--amber); }
+
+  /* ── PAGINATION ── */
+  .pagination {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    font-size: 12px;
+  }
+
+  .page-info { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+
+  .page-controls { display: flex; gap: 6px; }
+
+  .page-btn {
+    padding: 5px 12px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+
+  .page-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .page-btn.active { background: var(--amber); color: #000; border-color: var(--amber); font-weight: 700; }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 680px;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+  }
+
+  .modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 1;
+  }
+
+  .modal-title {
+    font-family: var(--font-display);
+    font-size: 24px;
+    letter-spacing: 1px;
+    color: var(--amber);
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    transition: color 0.15s;
+  }
+
+  .modal-close:hover { color: var(--text); }
+
+  .modal-body { padding: 24px; }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .detail-item {}
+
+  .detail-item-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .detail-item-value {
+    font-size: 14px;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .detail-item-value.mono { font-family: var(--font-mono); }
+  .detail-item-value.big { font-family: var(--font-display); font-size: 28px; color: var(--red); }
+  .detail-item-value.amber { color: var(--amber); }
+
+  .detail-section-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 12px 0 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+    margin-top: 8px;
+  }
+
+  .alert-box {
+    padding: 12px 16px;
+    border-radius: 5px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .alert-red { background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.3); color: var(--red); }
+  .alert-amber { background: rgba(245,166,35,0.1); border: 1px solid rgba(245,166,35,0.3); color: var(--amber); }
+
+  .modal-actions { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 8px; }
+
+  /* ── LOADING / EMPTY ── */
+  .loading-state, .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    color: var(--text-muted);
+    gap: 16px;
+  }
+
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--amber);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-icon { font-size: 40px; opacity: 0.3; }
+  .empty-title { font-size: 16px; font-weight: 700; color: var(--text-dim); }
+  .empty-sub { font-size: 13px; text-align: center; max-width: 320px; }
+
+  /* ── NO SERVER BANNER ── */
+  .no-server-banner {
+    background: rgba(245,166,35,0.08);
+    border: 1px solid rgba(245,166,35,0.2);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin: 20px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .no-server-banner strong { color: var(--amber); }
+  .no-server-banner code {
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--green);
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* refresh countdown */
+  .countdown {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .countdown-time { color: var(--amber); }
+
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="header-left">
+    <div class="logo">BEXAR TAX INTEL</div>
+    <div class="logo-sub">Delinquency Intelligence System</div>
+  </div>
+  <div class="header-right">
+    <div class="scan-status">
+      <div class="pulse-dot idle" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+    <div class="countdown" id="countdownWrap" style="display:none">
+      ⏱ Next refresh: <span class="countdown-time" id="countdownTimer">3:00:00</span>
+    </div>
+    <button class="btn btn-outline" onclick="exportCSV()">↓ Export</button>
+    <button class="btn btn-amber" onclick="triggerScan()" id="scanBtn">↻ Scan Now</button>
+  </div>
+</header>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat-card amber">
+    <div class="stat-label">Total Delinquent</div>
+    <div class="stat-value amber" id="statDelinquent">—</div>
+    <div class="stat-sub" id="statTotal">of — accounts</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">Total $ Owed (Live)</div>
+    <div class="stat-value red" id="statTotalOwed">—</div>
+    <div class="stat-sub">combined delinquent value</div>
+  </div>
+  <div class="stat-card amber">
+    <div class="stat-label">Active Deferral / Tax Loan</div>
+    <div class="stat-value amber" id="statDeferral">—</div>
+    <div class="stat-sub">borrowed to pay taxes</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">Never Made a Payment</div>
+    <div class="stat-value red" id="statNeverPaid">—</div>
+    <div class="stat-sub">zero payment history</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-label">Scan Progress</div>
+    <div class="stat-value blue" id="statProgress">0%</div>
+    <div class="stat-sub" id="statLastScan">Last scan: never</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Filters</div>
+
+      <div class="filter-group">
+        <label class="filter-label">Search Owner / Address / Account</label>
+        <input type="text" class="filter-input" id="searchInput" placeholder="Search..." oninput="applyFilters()">
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">Quick Filters</label>
+        <div class="filter-toggle" id="toggle-delinquent" onclick="toggleFilter('delinquent')">
+          <div class="toggle-box"><span class="toggle-check">✓</span></div>
+          <span class="toggle-label">Delinquent Only</span>
+          <span class="toggle-count" id="count-delinquent">—</span>
+        </div>
+        <div class="filter-toggle" id="toggle-deferral" onclick="toggleFilter('deferral')">
+          <div class="toggle-box"><span class="toggle-check">✓</span></div>
+          <span class="toggle-label">Has Tax Loan / Deferral</span>
+          <span class="toggle-count" id="count-deferral">—</span>
+        </div>
+        <div class="filter-toggle" id="toggle-neverPaid" onclick="toggleFilter('neverPaid')">
+          <div class="toggle-box"><span class="toggle-check">✓</span></div>
+          <span class="toggle-label">Never Paid</span>
+          <span class="toggle-count" id="count-neverPaid">—</span>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">Min Amount Owed ($)</label>
+        <input type="number" class="filter-input" id="minOwed" placeholder="e.g. 5000" oninput="applyFilters()">
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">Max Amount Owed ($)</label>
+        <input type="number" class="filter-input" id="maxOwed" placeholder="e.g. 500000" oninput="applyFilters()">
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">Property Class</label>
+        <select class="filter-input" id="propertyClass" onchange="applyFilters()">
+          <option value="">All Classes</option>
+          <option value="RESIDENTIAL, SINGLE-FAMILY">Residential Single-Family</option>
+          <option value="VACANT LOTS">Vacant Lots</option>
+          <option value="COMMERCIAL">Commercial</option>
+          <option value="FARM">Farm & Ranch</option>
+          <option value="MULTI-FAMILY">Multi-Family</option>
+          <option value="MOBILE HOMES">Mobile Homes</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">Results Per Page</label>
+        <select class="filter-input" id="limitSelect" onchange="applyFilters()">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+
+      <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="clearFilters()">Clear All Filters</button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Scan Progress</div>
+      <div class="progress-wrap">
+        <div class="progress-bar" id="progressBar" style="width:0%"></div>
+      </div>
+      <div class="progress-label">
+        <span id="progressScanned">0</span>
+        <span id="progressTotal">/ 0 accounts</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLE AREA -->
+  <div class="table-area">
+
+    <!-- No server banner (shown when backend isn't running) -->
+    <div class="no-server-banner" id="noBanner" style="display:none">
+      <strong>⚠️ Backend server not detected.</strong> To activate live data, run the server:<br><br>
+      1. Copy <code>tax_roll.csv</code> to the server folder<br>
+      2. Run: <code>npm install && node server.js</code><br>
+      3. Dashboard will auto-connect and begin scanning all 28,594 accounts<br><br>
+      <span style="color:var(--text-muted)">Below is a demo with sample data to preview the interface.</span>
+    </div>
+
+    <div class="table-toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input type="text" class="search-input" id="tableSearch" placeholder="Quick search..." oninput="document.getElementById('searchInput').value = this.value; applyFilters()">
+      </div>
+      <div class="result-count" id="resultCount">Loading...</div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="setSort('account')">Account #</th>
+            <th onclick="setSort('ownerName')">Owner</th>
+            <th>Property Address</th>
+            <th onclick="setSort('totalAmountDue')">Live Amount Due ↕</th>
+            <th onclick="setSort('rollAmountDue')">Roll Amount</th>
+            <th>Variance</th>
+            <th onclick="setSort('priorYearsDue')">Prior Yrs</th>
+            <th>Last Payment</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr>
+            <td colspan="10">
+              <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <span>Connecting to backend...</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination">
+      <div class="page-info" id="pageInfo">—</div>
+      <div class="page-controls" id="pageControls"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PROPERTY DETAIL MODAL -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">Property Detail</div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);margin-top:4px" id="modalAccount"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+const API = 'http://localhost:3001/api';
+let state = {
+  data: [],
+  total: 0,
+  page: 1,
+  pages: 1,
+  sort: 'totalAmountDue',
+  order: 'desc',
+  filters: {
+    search: '',
+    delinquent: false,
+    deferral: false,
+    neverPaid: false,
+    minOwed: '',
+    maxOwed: '',
+    propertyClass: '',
+    limit: 50,
+  },
+  serverOnline: false,
+  stats: {},
+  refreshTimer: null,
+  nextRefresh: null,
+};
+
+// ── API CALLS ──
+async function fetchStatus() {
+  try {
+    const res = await fetch(`${API}/status`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    state.serverOnline = true;
+    document.getElementById('noBanner').style.display = 'none';
+    updateStats(data);
+    return data;
+  } catch {
+    state.serverOnline = false;
+    document.getElementById('noBanner').style.display = 'block';
+    setStatusOffline();
+    useDemoData();
+    return null;
+  }
+}
+
+async function fetchProperties() {
+  if (!state.serverOnline) return;
+  const f = state.filters;
+  const params = new URLSearchParams({
+    page: state.page,
+    limit: f.limit,
+    sort: state.sort,
+    order: state.order,
+    ...(f.search && { search: f.search }),
+    ...(f.delinquent && { delinquent: 'true' }),
+    ...(f.deferral && { deferral: 'true' }),
+    ...(f.neverPaid && { neverPaid: 'true' }),
+    ...(f.minOwed && { minOwed: f.minOwed }),
+    ...(f.maxOwed && { maxOwed: f.maxOwed }),
+    ...(f.propertyClass && { propertyClass: f.propertyClass }),
+  });
+
+  try {
+    const res = await fetch(`${API}/properties?${params}`);
+    const data = await res.json();
+    state.data = data.data;
+    state.total = data.total;
+    state.pages = data.pages;
+    renderTable();
+    renderPagination();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ── STATS ──
+function updateStats(s) {
+  const stats = s.stats || {};
+  state.stats = stats;
+
+  document.getElementById('statDelinquent').textContent = fmtNum(stats.delinquent);
+  document.getElementById('statTotal').textContent = `of ${fmtNum(stats.total || s.totalAccounts)} accounts`;
+  document.getElementById('statTotalOwed').textContent = fmtMoney(stats.totalDelinquentValue);
+  document.getElementById('statDeferral').textContent = fmtNum(stats.withDeferral);
+  document.getElementById('statNeverPaid').textContent = fmtNum(stats.neverPaid);
+
+  const pct = s.progress || 0;
+  document.getElementById('statProgress').textContent = `${pct}%`;
+  document.getElementById('progressBar').style.width = `${pct}%`;
+  document.getElementById('progressScanned').textContent = fmtNum(s.scannedAccounts);
+  document.getElementById('progressTotal').textContent = `/ ${fmtNum(s.totalAccounts)} accounts`;
+
+  // Filter counts
+  document.getElementById('count-delinquent').textContent = fmtNum(stats.delinquent);
+  document.getElementById('count-deferral').textContent = fmtNum(stats.withDeferral);
+  document.getElementById('count-neverPaid').textContent = fmtNum(stats.neverPaid);
+
+  if (s.lastFullScan) {
+    document.getElementById('statLastScan').textContent = `Last scan: ${fmtDate(s.lastFullScan)}`;
+  }
+
+  // Status dot
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  if (s.scanInProgress) {
+    dot.className = 'pulse-dot scanning';
+    txt.textContent = `Scanning... ${s.progress || 0}%`;
+  } else {
+    dot.className = 'pulse-dot';
+    txt.textContent = s.lastFullScan ? `Live — updated ${fmtTimeAgo(s.lastFullScan)}` : 'Ready';
+  }
+}
+
+function setStatusOffline() {
+  document.getElementById('statusDot').className = 'pulse-dot idle';
+  document.getElementById('statusText').textContent = 'Demo mode — server offline';
+}
+
+// ── TABLE RENDER ──
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const count = document.getElementById('resultCount');
+
+  if (!state.data.length) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">No results found</div>
+      <div class="empty-sub">Try adjusting your filters or run a scan first.</div>
+    </div></td></tr>`;
+    count.textContent = '0 results';
+    return;
+  }
+
+  count.textContent = `${fmtNum(state.total)} results`;
+
+  tbody.innerHTML = state.data.map(p => {
+    const variance = (p.totalAmountDue || 0) - (p.rollAmountDue || 0);
+    const varClass = variance > 0 ? 'variance-up' : variance < 0 ? 'variance-down' : '';
+    const varPrefix = variance > 0 ? '+' : '';
+
+    const lastPmt = p.lastPaymentDate
+      ? `<span class="last-payment ${isOldPayment(p.lastPaymentDate) ? 'old' : 'recent'}">${p.lastPaymentDate}</span>`
+      : `<span class="last-payment never">NEVER</span>`;
+
+    const badges = [];
+    if (p.isDelinquent) badges.push(`<span class="badge badge-red">⚠ Delinquent</span>`);
+    if (p.hasActiveDeferral) badges.push(`<span class="badge badge-amber">⚡ Tax Loan</span>`);
+    if (p.neverPaid && p.isDelinquent) badges.push(`<span class="badge badge-red">✗ No Payments</span>`);
+    if (!p.isDelinquent && p.scrapedAt) badges.push(`<span class="badge badge-green">✓ Current</span>`);
+    if (p.error) badges.push(`<span class="badge badge-muted">? Error</span>`);
+
+    return `<tr>
+      <td><a class="account-num" href="${p.directUrl || '#'}" target="_blank">${p.account}</a></td>
+      <td><div class="owner-name">${p.ownerName || '—'}</div></td>
+      <td><div class="address-cell">${p.propertyAddress || '—'}, ${p.propertyZip || ''}</div></td>
+      <td class="money live-due">${p.totalAmountDue ? fmtMoney(p.totalAmountDue) : p.scrapedAt ? '$0' : '—'}</td>
+      <td class="money roll-due">${fmtMoney(p.rollAmountDue)}</td>
+      <td class="money ${varClass}">${p.totalAmountDue ? `${varPrefix}${fmtMoney(variance)}` : '—'}</td>
+      <td class="money" style="color:var(--text-dim)">${p.priorYearsDue ? fmtMoney(p.priorYearsDue) : '—'}</td>
+      <td>${lastPmt}</td>
+      <td>${badges.join(' ')}</td>
+      <td><button class="action-btn" onclick="openDetail('${p.account}')">Detail</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── PAGINATION ──
+function renderPagination() {
+  const info = document.getElementById('pageInfo');
+  const controls = document.getElementById('pageControls');
+  const start = (state.page - 1) * state.filters.limit + 1;
+  const end = Math.min(state.page * state.filters.limit, state.total);
+  info.textContent = `Showing ${fmtNum(start)}–${fmtNum(end)} of ${fmtNum(state.total)}`;
+
+  const pages = [];
+  pages.push(`<button class="page-btn" onclick="goPage(${state.page-1})" ${state.page<=1?'disabled':''}>‹ Prev</button>`);
+
+  const maxPages = state.pages;
+  let start_p = Math.max(1, state.page - 2);
+  let end_p = Math.min(maxPages, state.page + 2);
+  if (start_p > 1) pages.push(`<button class="page-btn" onclick="goPage(1)">1</button>${start_p > 2 ? '<span style="color:var(--text-muted);padding:0 4px">…</span>' : ''}`);
+  for (let i = start_p; i <= end_p; i++) {
+    pages.push(`<button class="page-btn ${i===state.page?'active':''}" onclick="goPage(${i})">${i}</button>`);
+  }
+  if (end_p < maxPages) pages.push(`${end_p < maxPages - 1 ? '<span style="color:var(--text-muted);padding:0 4px">…</span>' : ''}<button class="page-btn" onclick="goPage(${maxPages})">${maxPages}</button>`);
+  pages.push(`<button class="page-btn" onclick="goPage(${state.page+1})" ${state.page>=state.pages?'disabled':''}>Next ›</button>`);
+
+  controls.innerHTML = pages.join('');
+}
+
+function goPage(p) {
+  if (p < 1 || p > state.pages) return;
+  state.page = p;
+  fetchProperties();
+}
+
+// ── FILTERS ──
+let filterTimer;
+function applyFilters() {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    state.filters.search = document.getElementById('searchInput').value;
+    state.filters.minOwed = document.getElementById('minOwed').value;
+    state.filters.maxOwed = document.getElementById('maxOwed').value;
+    state.filters.propertyClass = document.getElementById('propertyClass').value;
+    state.filters.limit = parseInt(document.getElementById('limitSelect').value);
+    state.page = 1;
+    fetchProperties();
+  }, 300);
+}
+
+function toggleFilter(key) {
+  state.filters[key] = !state.filters[key];
+  document.getElementById(`toggle-${key}`).classList.toggle('active', state.filters[key]);
+  state.page = 1;
+  fetchProperties();
+}
+
+function clearFilters() {
+  state.filters = { search:'', delinquent:false, deferral:false, neverPaid:false, minOwed:'', maxOwed:'', propertyClass:'', limit:50 };
+  document.getElementById('searchInput').value = '';
+  document.getElementById('tableSearch').value = '';
+  document.getElementById('minOwed').value = '';
+  document.getElementById('maxOwed').value = '';
+  document.getElementById('propertyClass').value = '';
+  document.getElementById('limitSelect').value = '50';
+  ['delinquent','deferral','neverPaid'].forEach(k => document.getElementById(`toggle-${k}`).classList.remove('active'));
+  state.page = 1;
+  fetchProperties();
+}
+
+function setSort(field) {
+  if (state.sort === field) {
+    state.order = state.order === 'desc' ? 'asc' : 'desc';
+  } else {
+    state.sort = field;
+    state.order = 'desc';
+  }
+  fetchProperties();
+}
+
+// ── MODAL ──
+async function openDetail(account) {
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('modalTitle').textContent = 'Loading...';
+  document.getElementById('modalBody').innerHTML = '<div class="loading-state"><div class="loading-spinner"></div></div>';
+
+  let p;
+  if (state.serverOnline) {
+    try {
+      const res = await fetch(`${API}/property/${account}`);
+      p = await res.json();
+    } catch { p = state.data.find(d => d.account === account); }
+  } else {
+    p = state.data.find(d => d.account === account) || {};
+  }
+
+  if (!p) {
+    document.getElementById('modalBody').innerHTML = '<div class="empty-state"><div class="empty-title">Property not found</div></div>';
+    return;
+  }
+
+  document.getElementById('modalTitle').textContent = p.ownerName || p.account;
+  document.getElementById('modalAccount').textContent = `Account: ${p.account} · ${p.propertyAddress || ''}`;
+
+  const alerts = [];
+  if (p.hasActiveDeferral) alerts.push(`<div class="alert-box alert-amber">⚡ This account has an active tax deferral / loan</div>`);
+  if (p.neverPaid && p.isDelinquent) alerts.push(`<div class="alert-box alert-red">✗ No payment has ever been received on this account</div>`);
+  if (p.isDelinquent) alerts.push(`<div class="alert-box alert-red">⚠ Property is tax delinquent</div>`);
+
+  document.getElementById('modalBody').innerHTML = `
+    ${alerts.join('')}
+
+    <div class="detail-section-title">Tax Amounts</div>
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="detail-item-label">Total Amount Due (Live)</div>
+        <div class="detail-item-value big">${fmtMoney(p.totalAmountDue)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Tax Roll Amount</div>
+        <div class="detail-item-value mono" style="font-size:20px;color:var(--text-dim)">${fmtMoney(p.rollAmountDue)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">2025 Year Tax Levy</div>
+        <div class="detail-item-value mono">${fmtMoney(p.taxLevy2025)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">2025 Amount Due</div>
+        <div class="detail-item-value mono">${fmtMoney(p.amountDue2025)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Prior Years Due</div>
+        <div class="detail-item-value mono" style="color:var(--red)">${fmtMoney(p.priorYearsDue)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Delinquent After</div>
+        <div class="detail-item-value mono amber">${p.delinquentAfter || '—'}</div>
+      </div>
+    </div>
+
+    <div class="detail-section-title">Payment History</div>
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="detail-item-label">Last Payment Date</div>
+        <div class="detail-item-value mono ${!p.lastPaymentDate ? 'text-red' : ''}" style="${!p.lastPaymentDate ? 'color:var(--red)' : ''}">${p.lastPaymentDate || 'NEVER'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Last Payment Amount</div>
+        <div class="detail-item-value mono">${fmtMoney(p.lastPaymentAmount)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Last Payer</div>
+        <div class="detail-item-value">${p.lastPayer || '—'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Pending Payment</div>
+        <div class="detail-item-value">None</div>
+      </div>
+    </div>
+
+    <div class="detail-section-title">Property Details</div>
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="detail-item-label">Total Market Value</div>
+        <div class="detail-item-value mono">${fmtMoney(p.totalMarketValue)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Land Value</div>
+        <div class="detail-item-value mono">${fmtMoney(p.landValue)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Improvement Value</div>
+        <div class="detail-item-value mono">${fmtMoney(p.improvementValue)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Property Class</div>
+        <div class="detail-item-value">${p.propertyClass || '—'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Exemptions</div>
+        <div class="detail-item-value">${p.exemptions || 'None'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Last Verified</div>
+        <div class="detail-item-value mono" style="font-size:11px">${p.scrapedAt ? fmtDate(p.scrapedAt) : '—'}</div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <a href="${p.directUrl || `https://bexar.acttax.com/act_webdev/bexar/showdetail.jsp?accountNumber=${p.account}`}" target="_blank" class="btn btn-amber">↗ View on Bexar Tax Site</a>
+      <a href="https://bexar.tx.publicsearch.us/" target="_blank" class="btn btn-outline">↗ Public Records Search</a>
+      <button class="btn btn-outline" onclick="rescanAccount('${p.account}')">↻ Rescan This Account</button>
+    </div>
+  `;
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+async function rescanAccount(account) {
+  if (!state.serverOnline) return alert('Backend server required for live rescanning.');
+  const btn = event.target;
+  btn.textContent = 'Scanning...';
+  btn.disabled = true;
+  try {
+    await fetch(`${API}/rescan/${account}`, { method: 'POST' });
+    await openDetail(account);
+    fetchProperties();
+  } catch {}
+  btn.textContent = '↻ Rescan';
+  btn.disabled = false;
+}
+
+// ── SCAN CONTROLS ──
+async function triggerScan() {
+  if (!state.serverOnline) return alert('Backend server is not running. Start it with: node server.js');
+  const btn = document.getElementById('scanBtn');
+  btn.textContent = 'Starting...';
+  btn.disabled = true;
+  await fetch(`${API}/scan`, { method: 'POST' });
+  setTimeout(() => { btn.textContent = '↻ Scan Now'; btn.disabled = false; }, 2000);
+}
+
+function exportCSV() {
+  if (!state.serverOnline) return alert('Backend server required for export.');
+  window.open(`${API}/export`, '_blank');
+}
+
+// ── COUNTDOWN TIMER ──
+function startCountdown() {
+  const THREE_HOURS = 3 * 60 * 60 * 1000;
+  state.nextRefresh = Date.now() + THREE_HOURS;
+  document.getElementById('countdownWrap').style.display = 'flex';
+
+  setInterval(() => {
+    const remaining = Math.max(0, state.nextRefresh - Date.now());
+    const h = Math.floor(remaining / 3600000);
+    const m = Math.floor((remaining % 3600000) / 60000);
+    const s = Math.floor((remaining % 60000) / 1000);
+    document.getElementById('countdownTimer').textContent =
+      `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }, 1000);
+}
+
+// ── DEMO DATA ──
+function useDemoData() {
+  const demo = [
+    { account:'040540080130', ownerName:'CERISOLA PATRICIA T', propertyAddress:'101 STILLWELL ST', propertyZip:'78209', rollAmountDue:450000, totalAmountDue:567204.02, priorYearsDue:494912.87, amountDue2025:72291.15, lastPaymentDate:null, lastPaymentAmount:null, isDelinquent:true, hasActiveDeferral:true, neverPaid:true, totalMarketValue:4475000, exemptions:'HOMESTEAD, OVER 65', propertyClass:'RESIDENTIAL, SINGLE-FAMILY', scrapedAt:new Date().toISOString() },
+    { account:'210007012X', ownerName:'1ST QUALITY CYLINDERS INC', propertyAddress:'931 W LAUREL', propertyZip:'78201', rollAmountDue:1094108, totalAmountDue:1108234.50, priorYearsDue:880000, amountDue2025:228234, lastPaymentDate:'03/15/2022', lastPaymentAmount:5000, isDelinquent:true, hasActiveDeferral:false, neverPaid:false, totalMarketValue:1200000, exemptions:'None', propertyClass:'COMMERCIAL', scrapedAt:new Date().toISOString() },
+    { account:'886001901X', ownerName:'ARTISAN PARK LLC', propertyAddress:'REFUGIO ST', propertyZip:'78210', rollAmountDue:891241, totalAmountDue:912100, priorYearsDue:780000, amountDue2025:132100, lastPaymentDate:'01/30/2023', lastPaymentAmount:12000, isDelinquent:true, hasActiveDeferral:true, neverPaid:false, totalMarketValue:2000000, exemptions:'None', propertyClass:'COMMERCIAL', scrapedAt:new Date().toISOString() },
+    { account:'404024023X', ownerName:'RODRIGUEZ MARIA E', propertyAddress:'4422 SPRINGFIELD AVE', propertyZip:'78220', rollAmountDue:8400, totalAmountDue:9122.44, priorYearsDue:6200, amountDue2025:2922, lastPaymentDate:'06/12/2021', lastPaymentAmount:800, isDelinquent:true, hasActiveDeferral:false, neverPaid:false, totalMarketValue:89000, exemptions:'HOMESTEAD', propertyClass:'RESIDENTIAL, SINGLE-FAMILY', scrapedAt:new Date().toISOString() },
+    { account:'116000025X', ownerName:'JOHNSON WILLIE L', propertyAddress:'2301 MARTIN LUTHER KING DR', propertyZip:'78203', rollAmountDue:22000, totalAmountDue:24875.33, priorYearsDue:19400, amountDue2025:5475, lastPaymentDate:null, lastPaymentAmount:null, isDelinquent:true, hasActiveDeferral:false, neverPaid:true, totalMarketValue:145000, exemptions:'HOMESTEAD, OVER 65', propertyClass:'RESIDENTIAL, SINGLE-FAMILY', scrapedAt:new Date().toISOString() },
+  ];
+
+  state.data = demo;
+  state.total = demo.length;
+  state.pages = 1;
+
+  document.getElementById('statDelinquent').textContent = demo.filter(d=>d.isDelinquent).length;
+  document.getElementById('statTotal').textContent = 'of 28,594 accounts (demo)';
+  document.getElementById('statTotalOwed').textContent = fmtMoney(demo.reduce((s,d)=>s+(d.totalAmountDue||0),0));
+  document.getElementById('statDeferral').textContent = demo.filter(d=>d.hasActiveDeferral).length;
+  document.getElementById('statNeverPaid').textContent = demo.filter(d=>d.neverPaid).length;
+  document.getElementById('statProgress').textContent = '0%';
+  document.getElementById('count-delinquent').textContent = demo.filter(d=>d.isDelinquent).length;
+  document.getElementById('count-deferral').textContent = demo.filter(d=>d.hasActiveDeferral).length;
+  document.getElementById('count-neverPaid').textContent = demo.filter(d=>d.neverPaid).length;
+
+  renderTable();
+  renderPagination();
+}
+
+// ── HELPERS ──
+function fmtMoney(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtNum(v) {
+  if (v === null || v === undefined) return '—';
+  return Number(v).toLocaleString('en-US');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function fmtTimeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h > 0) return `${h}h ago`;
+  return `${m}m ago`;
+}
+
+function isOldPayment(dateStr) {
+  if (!dateStr) return true;
+  const [m, d, y] = dateStr.split('/');
+  const dt = new Date(y, m-1, d);
+  return (Date.now() - dt.getTime()) > 365 * 24 * 3600000;
+}
+
+// ── INIT ──
+async function init() {
+  await fetchStatus();
+  if (state.serverOnline) {
+    await fetchProperties();
+    startCountdown();
+    // Poll status every 30 seconds
+    setInterval(async () => {
+      await fetchStatus();
+    }, 30000);
+    // Poll properties every 5 minutes
+    setInterval(fetchProperties, 5 * 60 * 1000);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
