@@ -116,40 +116,111 @@ function loadTaxRoll() {
 }
 
 // ─── SCRAPER ───────────────────────────────────────────────────────────────
+
+/** Parse Set-Cookie headers and return a cookie string for subsequent requests */
+function parseCookies(response) {
+  const raw = response.headers.raw()['set-cookie'] || [];
+  return raw.map(c => c.split(';')[0]).join('; ');
+}
+
+const COMMON_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
 async function scrapeAccount(account) {
   try {
-    // Step 1: search by account number
-    const searchUrl = `${CONFIG.BASE_URL}/showdetail.jsp?accountNumber=${account}`;
-    
-    const res = await fetch(searchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
+    // ── Step 1: GET index.jsp to establish a session cookie ──
+    const indexUrl = `${CONFIG.BASE_URL}/index.jsp`;
+
+    const indexRes = await fetch(indexUrl, {
+      headers: COMMON_HEADERS,
+      redirect: 'manual',
       timeout: 15000,
     });
 
-    if (!res.ok) {
-      return { account, error: `HTTP ${res.status}`, scrapedAt: new Date().toISOString() };
+    if (!indexRes.ok && indexRes.status !== 302) {
+      return { account, error: `Index page HTTP ${indexRes.status}`, scrapedAt: new Date().toISOString() };
     }
 
-    const html = await res.text();
-    const $ = cheerio.load(html);
-    const result = { account, scrapedAt: new Date().toISOString(), error: null };
+    const cookies = parseCookies(indexRes);
 
-    // Parse all bold label/value pairs from the detail page
+    // ── Step 2: POST the search form (searchby=4 → Account Number) ──
+    const searchBody = new URLSearchParams({
+      searchby: '4',
+      criteria: account,
+      subcriteria: '',
+    });
+
+    const postRes = await fetch(indexUrl, {
+      method: 'POST',
+      headers: {
+        ...COMMON_HEADERS,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookies,
+        'Referer': indexUrl,
+        'Origin': 'https://bexar.acttax.com',
+      },
+      body: searchBody.toString(),
+      redirect: 'manual',          // handle redirects ourselves so we keep cookies
+      timeout: 15000,
+    });
+
+    // Merge any new cookies from the POST response
+    const postCookies = parseCookies(postRes);
+    const allCookies = [cookies, postCookies].filter(Boolean).join('; ');
+
+    // ── Step 3: Follow redirect(s) to the detail / results page ──
+    let html;
+    if (postRes.status >= 300 && postRes.status < 400) {
+      const location = postRes.headers.get('location');
+      const redirectUrl = location.startsWith('http')
+        ? location
+        : new URL(location, indexUrl).href;
+
+      const detailRes = await fetch(redirectUrl, {
+        headers: { ...COMMON_HEADERS, 'Cookie': allCookies, 'Referer': indexUrl },
+        redirect: 'follow',
+        timeout: 15000,
+      });
+
+      if (!detailRes.ok) {
+        return { account, error: `Detail page HTTP ${detailRes.status}`, scrapedAt: new Date().toISOString() };
+      }
+      html = await detailRes.text();
+    } else if (postRes.ok) {
+      // No redirect — results came back inline
+      html = await postRes.text();
+    } else {
+      return { account, error: `Search POST HTTP ${postRes.status}`, scrapedAt: new Date().toISOString() };
+    }
+
+    // ── Step 3b: If we landed on a results list, follow the first detail link ──
+    let $ = cheerio.load(html);
+    const detailLink = $('a[href*="detail.jsp"], a[href*="showdetail"], a[href*="Detail"]')
+      .first().attr('href');
+
+    if (detailLink && !html.includes('Total Amount Due')) {
+      const detailUrl = detailLink.startsWith('http')
+        ? detailLink
+        : new URL(detailLink, indexUrl).href;
+
+      const detailRes = await fetch(detailUrl, {
+        headers: { ...COMMON_HEADERS, 'Cookie': allCookies, 'Referer': indexUrl },
+        redirect: 'follow',
+        timeout: 15000,
+      });
+
+      if (detailRes.ok) {
+        html = await detailRes.text();
+        $ = cheerio.load(html);
+      }
+    }
+
+    // ── Step 4: Parse the detail page ──
     const bodyText = $('body').text();
-
-    // Helper: extract value after a label
-    const extract = (label) => {
-      const regex = new RegExp(label + '[:\\s]*([\\$\\d,\\.\\w\\s/]+?)(?:\\n|\\r|\\*\\*|Last Payment|Delinquent|Prior|Total|Half|\\d{4} Year)', 'i');
-      const match = bodyText.match(regex);
-      return match ? match[1].trim() : null;
-    };
-
-    // Parse structured fields from the page HTML
-    const allText = $('body').html();
+    const result = { account, scrapedAt: new Date().toISOString(), error: null };
 
     // Account confirmed on page
     result.accountOnSite = bodyText.includes(account);
@@ -184,9 +255,9 @@ async function scrapeAccount(account) {
     result.isDelinquent = (result.totalAmountDue || 0) > 0 && (result.priorYearsDue || 0) > 0;
     result.neverPaid = bodyText.includes('Not Received') || result.lastPaymentDate === null;
 
-    // Payment history link
-    result.paymentHistoryUrl = `${CONFIG.BASE_URL}/showdetail.jsp?accountNumber=${account}`;
-    result.directUrl = searchUrl;
+    // Direct link for the user
+    result.paymentHistoryUrl = `${CONFIG.BASE_URL}/index.jsp`;
+    result.directUrl = `${CONFIG.BASE_URL}/index.jsp`;
 
     return result;
 
