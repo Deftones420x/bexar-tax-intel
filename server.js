@@ -97,6 +97,7 @@ function loadTaxRoll() {
         mailingState:     (row['STATE'] || '').trim(),
         mailingZip:       (row['ZIP'] || '').trim(),
         parcelName:       (row['PARCEL-NAME'] || '').trim(),
+        propertyAddress:  (row['PARCEL-NAME'] || '').trim(),
         rollAmountDue:    parseFloat((row['TOT-AMT-DUE'] || '0').replace(/[,$]/g, '')) || 0,
         paymentAgreement: (row['PAYMENT-AGREEMENT'] || '').trim(),
       });
@@ -145,6 +146,7 @@ async function scrapeAccount(account) {
     }
 
     const cookies = parseCookies(indexRes);
+    console.log(`[SCRAPE ${account}] Step 1 — GET index.jsp → HTTP ${indexRes.status}, cookies: ${cookies ? cookies.substring(0, 80) + '...' : '(none)'}`);
 
     // ── Step 2: POST the search form (searchby=4 → Account Number) ──
     const searchBody = new URLSearchParams({
@@ -170,6 +172,7 @@ async function scrapeAccount(account) {
     // Merge any new cookies from the POST response
     const postCookies = parseCookies(postRes);
     const allCookies = [cookies, postCookies].filter(Boolean).join('; ');
+    console.log(`[SCRAPE ${account}] Step 2 — POST index.jsp → HTTP ${postRes.status}, location: ${postRes.headers.get('location') || '(none)'}`);
 
     // ── Step 3: Follow redirect(s) to the detail / results page ──
     let html;
@@ -178,6 +181,7 @@ async function scrapeAccount(account) {
       const redirectUrl = location.startsWith('http')
         ? location
         : new URL(location, indexUrl).href;
+      console.log(`[SCRAPE ${account}] Step 3 — Following redirect to: ${redirectUrl}`);
 
       const detailRes = await fetch(redirectUrl, {
         headers: { ...COMMON_HEADERS, 'Cookie': allCookies, 'Referer': indexUrl },
@@ -186,25 +190,39 @@ async function scrapeAccount(account) {
       });
 
       if (!detailRes.ok) {
+        console.log(`[SCRAPE ${account}] Step 3 FAILED — HTTP ${detailRes.status}`);
         return { account, error: `Detail page HTTP ${detailRes.status}`, scrapedAt: new Date().toISOString() };
       }
       html = await detailRes.text();
     } else if (postRes.ok) {
       // No redirect — results came back inline
       html = await postRes.text();
+      console.log(`[SCRAPE ${account}] Step 2 returned inline HTML (no redirect)`);
     } else {
+      console.log(`[SCRAPE ${account}] Step 2 FAILED — HTTP ${postRes.status}`);
       return { account, error: `Search POST HTTP ${postRes.status}`, scrapedAt: new Date().toISOString() };
     }
+
+    // Log what we actually got back
+    const pageTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    console.log(`[SCRAPE ${account}] Page title: "${pageTitle ? pageTitle[1].trim() : '(none)'}"`);
+    console.log(`[SCRAPE ${account}] HTML length: ${html.length} chars`);
+    // Dump first 2000 chars of body text for debugging
+    const debugText = cheerio.load(html)('body').text().replace(/\s+/g, ' ').trim().substring(0, 2000);
+    console.log(`[SCRAPE ${account}] Body text preview:\n${debugText}\n`);
 
     // ── Step 3b: If we landed on a results list, follow the first detail link ──
     let $ = cheerio.load(html);
     const detailLink = $('a[href*="detail.jsp"], a[href*="showdetail"], a[href*="Detail"]')
       .first().attr('href');
+    console.log(`[SCRAPE ${account}] Detail link found: ${detailLink || '(none)'}`);
+    console.log(`[SCRAPE ${account}] Has "Total Amount Due" in HTML: ${html.includes('Total Amount Due')}`);
 
     if (detailLink && !html.includes('Total Amount Due')) {
       const detailUrl = detailLink.startsWith('http')
         ? detailLink
         : new URL(detailLink, indexUrl).href;
+      console.log(`[SCRAPE ${account}] Step 3b — Following detail link: ${detailUrl}`);
 
       const detailRes = await fetch(detailUrl, {
         headers: { ...COMMON_HEADERS, 'Cookie': allCookies, 'Referer': indexUrl },
@@ -215,6 +233,10 @@ async function scrapeAccount(account) {
       if (detailRes.ok) {
         html = await detailRes.text();
         $ = cheerio.load(html);
+        const detailText = $('body').text().replace(/\s+/g, ' ').trim().substring(0, 2000);
+        console.log(`[SCRAPE ${account}] Detail page text preview:\n${detailText}\n`);
+      } else {
+        console.log(`[SCRAPE ${account}] Step 3b FAILED — HTTP ${detailRes.status}`);
       }
     }
 
@@ -258,6 +280,8 @@ async function scrapeAccount(account) {
     // Direct link for the user
     result.paymentHistoryUrl = `${CONFIG.BASE_URL}/index.jsp`;
     result.directUrl = `${CONFIG.BASE_URL}/index.jsp`;
+
+    console.log(`[SCRAPE ${account}] PARSED → accountOnSite=${result.accountOnSite}, totalDue=$${result.totalAmountDue}, levy=$${result.taxLevy2025}, priorDue=$${result.priorYearsDue}, marketVal=$${result.totalMarketValue}, delinquent=${result.isDelinquent}`);
 
     return result;
 
